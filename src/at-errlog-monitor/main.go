@@ -18,8 +18,18 @@ import (
 
 var ( // TODO: make them configurable
 	logger           = log.New(os.Stderr, "", log.LstdFlags)
-	outPut io.Writer = os.Stdout
+	outPut io.Writer = os.Stdout // var _ io.Writer = (output)(nil) make sure output implements io.Writer
 )
+
+var observers []observer
+
+func init() {
+	observers = []observer{&simpleObserver{}} // TODO: define each observer, and make them configurable
+}
+
+type observer interface {
+	outputHandler(identity config.MysqlPort, lineCh <-chan *tail.Line)
+}
 
 type control struct {
 	configCh   chan config.MysqlConfig
@@ -148,14 +158,19 @@ func startTailFile(identity config.MysqlPort, pathCh <-chan string) {
 					if nil != err {
 						logger.Printf("start tail file(%v) error: %v", t.Filename, err)
 					}
-					handleOutput(identity, t.Lines)
+					for _, obs := range observers {
+						obs.outputHandler(identity, t.Lines)
+					}
 				}
 			}
 		}
 	}()
 }
 
-func handleOutput(identity config.MysqlPort, lineCh <-chan *tail.Line) {
+type simpleObserver struct { // for demo
+}
+
+func (s *simpleObserver) outputHandler(identity config.MysqlPort, lineCh <-chan *tail.Line) {
 	go func() {
 		for l := range lineCh {
 			if strings.Contains(l.Text, "[Warning]") {
